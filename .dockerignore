@@ -1,0 +1,8 @@
+web/node_modules
+internal/ui/dist
+.git
+*.log
+files
+# Runtime data folder (host bind mount) — never part of the build context.
+DATA
+.env

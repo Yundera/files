@@ -1,0 +1,49 @@
+/* Base styles. Everything else lives in a component's scoped <style>. */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+/* A white panel with dark text — NOT maison's dark glass desktop. See tokens.css. */
+body {
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  font-weight: 400;
+  color: var(--text);
+  background: var(--surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  height: 100%;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* Named to match CasaOS-UI, which uses .one-line for the same purpose, so ported
+   markup keeps working. */
+.one-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* CasaOS `scrollbars-light`. */
+.scrollbars-light::-webkit-scrollbar {
+  width: 8px;
+}
+.scrollbars-light::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbars-light::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+}

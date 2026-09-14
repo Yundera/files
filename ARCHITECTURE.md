@@ -20,7 +20,8 @@ One container, one process, no database.
 │    textfile/  guarded read/write, YAML validation           │
 │    thumb/     on-the-fly downscale + bounded cache          │
 │    search/    bounded subtree name search                   │
-│    server/    chi router, SSE, SPA embed                    │
+│    live/      WS hub, copied from maison internal/live      │
+│    server/    chi router, SPA embed                          │
 │    ui/dist/   the built Svelte app, go:embed'ed             │
 │                                                             │
 │  web/         Svelte 5 + vite -> internal/ui/dist           │
@@ -55,8 +56,14 @@ rather than `filepath.Clean` plus a prefix test.
 
 On top of that, the vfs enforces:
 
-- **Normalisation.** Reject NUL bytes and any component that is `.` or `..`
-  after cleaning; collapse separators; a path must be valid UTF-8.
+- **Normalisation.** A path must be valid UTF-8 and free of NUL bytes and
+  backslashes. Separators collapse and `.` segments are dropped, but a `..`
+  segment is **rejected, not resolved**. `path.Clean` on a rooted path would
+  absorb it — `Clean("/../etc/passwd")` is `"/etc/passwd"` — which stays inside
+  the root and is therefore safe, but answers a traversal probe with a 200 for
+  some other file instead of a 400, leaving no distinguishable trace in the logs.
+  No legitimate client sends `..`: the UI builds every path from the breadcrumb
+  it was handed.
 - **The state-dir exclusion.** `STATE_DIR` (by default
   `${DATA_ROOT}/AppData/files`) is filtered out of every listing and rejected as
   a target by every mutating call. Without this the user can browse into their
@@ -115,16 +122,32 @@ Application rules, in `internal/ownership`:
 - **Copying:** the copy is a new file, so it gets `PUID:PGID` and the configured
   mode. **Moving** (rename) does not touch ownership at all — the inode is the
   same one.
-- Mode env vars are parsed once at startup; a malformed value is a fatal startup
-  error, not a silent fallback.
+- Mode env vars are parsed once at startup. A malformed value **falls back to the
+  default and logs a warning** — it is not fatal, reversing an earlier draft of
+  this document. `config.FromEnv` in maison never returns an error and documents
+  why: *"a dashboard that will not start is a worse outcome"*. One typo in a
+  compose file should not stop the file manager booting; the warning is what
+  keeps the fallback from being silent.
+- `envMode` accepts `775`, `0775` and `0o775` as the same value. Not politeness:
+  YAML reads an unquoted `0644` as octal and strips the leading zero, so a
+  compose file whose author wrote `0644` can hand us `644`.
 
 ---
 
 ## HTTP API
 
-REST under `/api`, JSON in and out, virtual paths as described above. Errors are
-`{"error": {"code": "...", "message": "..."}}` with a stable machine code, so the
-UI can say "that name already exists" rather than echoing a raw `errno`.
+REST under `/api`, JSON in and out, virtual paths as described above.
+
+Errors are `{"error": "<human sentence>"}` — the shape `packages/maison` uses at
+every call site, via `writeErr`. **The HTTP status is the machine-readable half
+of the contract** and the string is for the user, which the web client puts
+straight on screen. So handlers must pick a status the UI can branch on: `409` a
+name collision (this is what raises the conflict dialog), `403` permission,
+`413` too large, `422` a YAML syntax error, `404` gone.
+
+An earlier draft of this document specified a nested `{code, message}` object.
+That was dropped for consistency with maison — one error shape across the two
+apps is worth more than a second discriminator that duplicates the status line.
 
 ### Browse
 
@@ -168,7 +191,18 @@ is not — it has an operation status bar with per-item progress and cancel. So
 |---|---|
 | `GET /api/jobs` | Current and recently finished jobs |
 | `POST /api/jobs/{id}/cancel` | Cooperative cancel at the next item boundary |
-| `GET /api/events` | SSE stream: job progress, job completion, and directory-changed hints so an open listing refreshes itself |
+| `GET /ws` | WebSocket. Channels `jobs`, `uploads` and `dir` — job progress and completion, upload state, and directory-changed hints so an open listing refreshes itself |
+
+The transport is a **WebSocket, not SSE**: `internal/live/hub.go` is lifted from
+maison, where one `GET /ws` endpoint multiplexes named channels over a shared
+`Envelope{Type, Channel, ID, Data}` and clients subscribe and unsubscribe on it.
+Copying it means the reconnect handling, the slow-client drop policy (a full send
+buffer drops the message rather than blocking the hub) and the
+`BroadcastLazy` "produce the payload only if someone is listening" trick all come
+for free, and a fix in either app ports to the other.
+
+Progress is throttled to one broadcast per **300 ms**, maison's cadence
+everywhere, with a trailing call so the final state is never dropped.
 
 Jobs live in memory only. A restart loses the job list; it does not lose the work
 already done, and a half-finished copy leaves a `.part` file that the next run
@@ -278,7 +312,8 @@ the alternative — last-writer-wins on a file that another app also writes — 
 the kind of data loss users never trace back.
 
 For `.yml` / `.yaml`, the content is parsed with `gopkg.in/yaml.v3` before the
-write and a syntax error **blocks the save**, returning line and column. A file
+write and a syntax error **blocks the save**, returning the line (go-yaml
+reports a line, not a column) so the editor can put the cursor on it. A file
 manager on a PCS is going to be used to edit compose files; saving a broken one
 and finding out when a stack fails to come up is a bad trade against one round
 trip.
@@ -299,11 +334,23 @@ in pure Go is not well served. Formats with no pure-Go decoder — HEIC, AVIF, R
 — get no thumbnail and the UI falls back to a kind icon, which is the correct
 degradation rather than a broken image.
 
-Guards that matter on a folder of 4000 photos: a bounded worker pool (`GOMAXPROCS`,
-capped), a decoded-pixel ceiling so a decompression-bomb image cannot exhaust
-memory, and LRU eviction once the cache passes `THUMB_CACHE_MB`. Thumbnails are
-requested lazily by an `IntersectionObserver`, so scrolling past a folder does
-not queue every file in it.
+Guards that matter on a folder of 4000 photos:
+
+- **A decoded-pixel ceiling of 24 MP, checked with `image.DecodeConfig` BEFORE
+  `image.Decode`.** This is the decompression-bomb guard: a 200 KB PNG can
+  legally declare 40000x40000, and decoding it allocates ~6 GB. Checking after
+  the decode would be checking after the damage.
+- **A concurrency limit of 2**, not `GOMAXPROCS`. The scarce resource is memory,
+  not CPU: peak use is roughly `maxPixels x 4 x concurrency`, so ~200 MB. The
+  container's memory limit has to exceed that.
+- **LRU eviction** once the cache passes `THUMB_CACHE_MB`, with a floor of one
+  entry — a cap smaller than a single thumbnail would otherwise evict the one
+  just generated and thrash forever.
+
+The grid requests thumbnails with `loading="lazy"` rather than a hand-rolled
+`IntersectionObserver`: the browser's own heuristics are better than anything
+worth maintaining here, and it is one attribute instead of an observer whose
+lifecycle has to track a virtualised list.
 
 ---
 

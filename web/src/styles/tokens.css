@@ -1,0 +1,95 @@
+/*
+ * Files design tokens.
+ *
+ * The base is packages/maison/web/src/styles/tokens.css, which is itself a
+ * verbatim port of CasaOS-UI's SCSS variables. Keeping the same names means a
+ * component can move between the two apps unchanged.
+ *
+ * THE ONE STRUCTURAL DIFFERENCE FROM MAISON: CasaOS Files is a white full-screen
+ * PANEL, not the dark frosted-glass desktop. Maison's --glass-* tokens are
+ * therefore deliberately absent here — there is no surface in this app that
+ * should use them, and shipping them would invite exactly that mistake.
+ */
+:root {
+  /* Brand / semantic. --primary is CasaOS $casablue, unchanged. */
+  --blue: hsla(208, 100%, 45%, 1);
+  --green: hsla(118, 70%, 45%, 1);
+  --orange: hsl(14, 100%, 53%);
+  --yellow: hsl(48, 100%, 67%);
+  --red: hsl(348, 100%, 61%);
+  --primary: hsl(216, 90%, 54%);
+
+  /* CasaOS greys — the raw ramp. Prefer the semantic tokens below: the ramp says
+     which grey, the semantic name says what it is for, and only the latter
+     survives a theme change. */
+  --grey-100: hsla(208, 16%, 96%, 1);
+  --grey-200: hsla(208, 16%, 94%, 1);
+  --grey-300: hsla(208, 16%, 91%, 1);
+  --grey-400: hsla(208, 16%, 85%, 1);
+  --grey-600: hsla(208, 14%, 58%, 1);
+  --grey-800: hsla(208, 20%, 20%, 1);
+
+  /* Surfaces, lightest first. */
+  --surface: #fff; /* the file pane, modals, popovers */
+  --surface-2: hsla(208, 16%, 96%, 1); /* table headers, inset rows */
+  --surface-3: hsla(208, 16%, 92%, 1); /* pressed */
+  --surface-sunken: hsla(208, 18%, 97%, 1); /* the text editor pane */
+
+  /* Hairlines. */
+  --border: hsla(208, 16%, 88%, 1);
+  --border-strong: hsla(208, 16%, 78%, 1);
+
+  /* Text, most prominent first. */
+  --text: hsla(208, 24%, 18%, 1);
+  --text-muted: hsla(208, 14%, 44%, 1);
+  --text-subtle: hsla(208, 12%, 58%, 1);
+  --text-on-accent: #fff;
+
+  --scrim: rgba(18, 24, 33, 0.32);
+
+  /* ── CasaOS Files literals ────────────────────────────────────────────────
+     These five are hardcoded in CasaOS-UI's _filebrowser.scss rather than
+     derived from a SCSS variable, so they are transcribed rather than computed.
+     Note in particular that --sidebar-active is NOT --primary-light: CasaOS uses
+     two different blues for "selected row" and "active sidebar item", and
+     collapsing them is a visible regression. */
+  --primary-light: #deebfd; /* selected tile / selected row background */
+  --sidebar-bg: #f8f8f8; /* sidebar ground, also every hover surface */
+  --sidebar-hover: #f3f3f3; /* sidebar item hover (a shade darker than the ground) */
+  --sidebar-active: #deebfd; /* active sidebar item */
+  --toolbar-bg: rgb(49, 49, 54); /* floating dark selection toolbar */
+  --toolbar-hover: rgb(86, 86, 90);
+  --marquee: rgba(34, 118, 243, 0.2); /* rubber-band selection fill */
+  --breadcrumb-sep: #b5b5b5;
+  --breadcrumb-link: rgb(90, 90, 90);
+  --meta-text: rgba(37, 38, 43, 0.36); /* the date under a grid tile */
+
+  /* Radii. CasaOS uses exactly four. */
+  --radius-item: 4px; /* sidebar rows */
+  --radius-small: 5px; /* menu items, thumbnails, tile overlay buttons */
+  --radius-card: 10px; /* tiles, dropdowns, the selection toolbar */
+  --radius-thumb: 0.25rem; /* list-view thumbnails */
+
+  /* Typography */
+  --font-sans: BrittiSans, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Helvetica Neue", "Noto Sans", "Noto Sans CJK SC", "Microsoft YaHei",
+    "PingFang SC", sans-serif;
+  --font-base: 0.875rem; /* 14px — the base for tile titles, list cells, menus */
+  --font-meta: 0.75rem; /* 12px — dates, sizes, status lines */
+  --font-section: 1.25rem; /* sidebar section headings (.title.is-3) */
+
+  /* Layout — measured from _filebrowser.scss, not chosen. */
+  --sidebar-width: 15rem;
+  --grid-pitch: 144px; /* column width; cols = floor(containerWidth / 144) */
+  --grid-row-height: 200px;
+  --grid-tile-width: 120px;
+  --list-row-height: 3.25rem; /* 52px */
+  --list-header-height: 42px;
+}
+
+@font-face {
+  font-family: BrittiSans;
+  font-display: swap;
+  src: url("/fonts/britti-sans-regular.woff") format("woff");
+  font-weight: 400;
+}

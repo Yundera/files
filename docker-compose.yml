@@ -1,0 +1,48 @@
+# Local development stack. The PCS deployment is a different file entirely — it
+# puts an AppShield gate in front and takes this service off the shared network.
+# See README.md "Deployment on a PCS".
+name: files
+
+services:
+  files:
+    image: files:latest
+    build: .
+    container_name: files
+    restart: unless-stopped
+    ports:
+      # Container always listens on 8080; only the host side is configurable.
+      - "${HOST_PORT:-8080}:8080"
+    environment:
+      DATA_ROOT: "/DATA"
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      TZ: "${TZ:-UTC}"
+    volumes:
+      - type: bind
+        source: ${DATA_HOST_PATH:-./DATA}
+        target: /DATA
+    # Runs as root so it can read app data directories owned by other uids, then
+    # chowns what it creates to PUID:PGID. See ARCHITECTURE.md "Ownership and
+    # modes" for why `user: $PUID:$PGID` is NOT the answer here. The capability
+    # set is what pulls the blast radius back in.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - FSETID
+      - DAC_OVERRIDE
+      - DAC_READ_SEARCH
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    # The thumbnailer decodes up to 24 megapixels at a time, two at a time, so
+    # peak decode memory is roughly 24e6 x 4 bytes x 2 = ~200 MB on top of the
+    # binary. A limit below ~384M will OOM on a folder of full-size camera
+    # photos. See internal/thumb for the arithmetic.
+    deploy:
+      resources:
+        limits:
+          memory: 512M

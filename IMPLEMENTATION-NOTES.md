@@ -19,14 +19,18 @@ P=/d/workspace/yundera/yundera-root/packages/files
 docker run --rm -v $P/web:/src -w /src node:22 npm ci
 docker run --rm -v $P/web:/src -w /src node:22 npm run build
 
-docker run --rm -v $P:/src -w /src golang:1.25 go build ./cmd/files
-docker run --rm -v $P:/src -w /src golang:1.25 go test ./...
-docker run --rm -v $P:/src -w /src golang:1.25 go vet ./...
+docker run --rm -v $P:/src -w /src golang:1.26 go build ./cmd/files
+docker run --rm -v $P:/src -w /src golang:1.26 go test ./...
+docker run --rm -v $P:/src -w /src golang:1.26 go vet ./...
 ```
 
-Go 1.25 is not optional — the `os.Root` methods the vfs is built on
-(`Rename`, `Chown`, `Lchown`, `MkdirAll`, `RemoveAll`, `WriteFile`) are 1.24/1.25
-additions. Verified against `golang:1.25` before writing this.
+Go 1.26. Two independent reasons, both hard requirements:
+- The `os.Root` methods the vfs is built on (`Rename`, `Chown`, `Lchown`,
+  `MkdirAll`, `RemoveAll`, `WriteFile`) are 1.24/1.25 additions.
+- `golang.org/x/image` (webp and bmp decoding, CatmullRom scaling) requires
+  1.26 from v0.46.0. Pinning an older x/image was the alternative; 1.26 is what
+  `packages/maison`'s Dockerfile already builds with, so this keeps the two in
+  step rather than freezing a dependency.
 
 Add a `Makefile` or a `dev/build.sh` wrapping the above on day one; nobody will
 retype those lines.
@@ -60,11 +64,11 @@ This milestone is the one to spend test effort on — see the vfs test list belo
 
 ### M2 — Mutate, jobs, trash
 `mkdir`, `touch`, `rename`, then `copy`/`move`/`delete` on top of
-`internal/jobs`, the SSE stream, the conflict dialog, the job tray, and
+`internal/jobs`, the WebSocket hub, the conflict dialog, the job tray, and
 `internal/trash` with the Trash view.
 
 Build **delete-to-trash before copy/move**: it is a single `Rename` and it gets
-the job plumbing and the SSE wiring exercised with the least moving parts.
+the job plumbing and the WebSocket wiring exercised with the least moving parts.
 
 ### M3 — Upload
 tusd v2 as a library plus `tus-js-client`, staging in `STATE_DIR/uploads`,
@@ -160,6 +164,20 @@ directory may have been renamed or deleted. Validate the destination through the
 vfs at create time *and again* at commit time, and fail the upload cleanly rather
 than panicking or recreating a deleted directory.
 
+### The dev container's own paths are invisible to Docker
+The Docker socket is the **host** engine, so every `-v` source is resolved on the
+host, not inside this container. Bind-mounting a container-only path (`/tmp/...`,
+a scratch dir) silently creates an *empty* directory on the host and mounts that
+— the container comes up, the app runs, and every listing is empty with no error
+anywhere. Test data has to live under a real host path: `/d/workspace/...`
+(`D:\workspace\...` on the host), e.g. `/d/workspace/tmp-claude/`.
+
+The same rule bit `dev/build.sh`: it originally mounted only `web/`, but vite's
+`outDir` is `../internal/ui/dist`, which then resolved *outside* the mount. vite
+reported writing the files, they went into the container's own filesystem, and
+`go build` embedded the stale placeholder `index.html`. Mount the repo root and
+set the workdir to `web/`.
+
 ### Browsers throttle programmatic downloads
 Multi-select download fires one `<a download>` click per file. Chrome shows an
 "allow multiple downloads?" prompt once per origin — a user who dismisses it sees
@@ -216,7 +234,9 @@ decision exists for.
 | Explicit `DIR_MODE`/`FILE_MODE` | A umask can only clear bits, so under the usual `022` it cannot produce the group-writable result that lets a container running as another uid in the same group write to an uploaded file. | `UMASK`, which reads simpler and cannot express the requirement. |
 | Overwrites preserve uid/gid/mode | Editing an app's `config.yaml` must not re-home it to `PUID` and break the app that owns it. | Uniform chown, which is simpler and wrong. |
 | tus for upload | What FileBrowser uses, a real spec, and `tus-js-client` means the browser half is not ours to invent or debug. | A hand-rolled `Content-Range` scheme. |
-| Background jobs + SSE | A 50 GB copy is not a request, and CasaOS's UI already assumes an operation status bar with per-item progress and cancel. | Synchronous requests with a spinner. |
+| Background jobs over a WebSocket | A 50 GB copy is not a request, and CasaOS's UI already assumes an operation status bar with per-item progress and cancel. WS rather than SSE because maison's `internal/live/hub.go` already does exactly this and can be copied whole. | SSE (an earlier draft of ARCHITECTURE.md said SSE); synchronous requests with a spinner. |
+| `{"error": "sentence"}` + HTTP status | The shape maison uses at every call site. The status is the machine-readable half — 409 collision, 403 permission, 413 too large, 422 bad YAML — so a nested code object would only duplicate it. | A `{code, message}` object, which the first draft of ARCHITECTURE.md specified. |
+| Malformed config warns and falls back | Matches `config.FromEnv` in maison, which never returns an error: *"a dashboard that will not start is a worse outcome"*. One typo in a compose file should not stop the file manager booting. | A fatal startup error, which an earlier draft of this document specified. |
 | Jobs in memory | Persisting a queue means a database, which the app deliberately does not have. | A bolt/SQLite job store. |
 | YAML errors block the save | This app will be used to edit compose files on a PCS. Finding out a file is broken when a stack fails to come up is worse than one round trip. | A non-blocking warning. |
 | `baseMtime` check on save | Last-writer-wins on a file another app also writes is data loss users never trace back. | No check. |
