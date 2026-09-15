@@ -5,6 +5,9 @@ import type { Entry, Page, SortKey, ViewMode } from './types'
 
 export const TRASH_PATH = '__trash__'
 
+// The sidebar shortcuts. Every entry below the root must exist on disk or the
+// shortcut is a dead end, so the server creates them at startup — the matching
+// list is `Roots` in internal/bootstrap. Add an entry here and add it there too.
 export const roots = [
   { name: 'DATA', path: '/' },
   { name: 'Documents', path: '/Documents' },

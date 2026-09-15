@@ -57,36 +57,48 @@
     margin: 0;
   }
   li {
-    position: relative;
-    width: 106px;
-    height: 120px;
+    width: 124px;
+    height: 124px;
     margin: 0.5rem;
-    padding-top: 20px;
     background: var(--sidebar-bg);
     border-radius: var(--radius-card);
     font-size: 14px;
-    line-height: 1.5;
     transition: all 0.3s ease;
   }
   li:hover {
     background: rgb(235, 235, 235);
   }
+  /* A flex column, not a fixed padding-top plus an absolutely positioned image.
+     The old version pinned the art at top:60px and let the label find its own
+     position inside the button, so "Upload Folder" — the longest label, and the
+     only one that does not fit 106px on one line — wrapped down onto the art.
+     Laying both out in flow means the label can be any length without ever
+     reaching the illustration. */
   li button {
     all: unset;
-    display: block;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.375rem;
     width: 100%;
     height: 100%;
+    padding: 14px 6px 10px;
     cursor: pointer;
   }
   li span {
-    display: block;
-    padding: 0 0.5rem;
+    /* Two lines' worth, reserved on every tile so the art sits at the same
+       height across the row whether the label wrapped or not. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 2.6em;
+    line-height: 1.3;
+    text-align: center;
   }
   li img {
-    position: absolute;
-    top: 60px;
-    left: 25px;
-    width: 56px;
-    height: 56px;
+    width: 52px;
+    height: 52px;
   }
 </style>

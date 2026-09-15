@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yundera/files/internal/bootstrap"
 	"github.com/yundera/files/internal/config"
 	"github.com/yundera/files/internal/server"
 	"github.com/yundera/files/internal/ui"
@@ -26,6 +27,10 @@ func main() {
 	log.SetPrefix("files: ")
 
 	cfg := config.FromEnv()
+
+	// The sidebar links to Documents, Downloads and Media unconditionally, so
+	// they have to be there. Never fatal — see package bootstrap.
+	bootstrap.EnsureRoots(cfg)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,

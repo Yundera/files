@@ -136,6 +136,22 @@ host whose default umask is `022`. Group-writable is the point: it is what lets 
 container running as a different uid in the same group still write what you
 uploaded.
 
+### Directories the app creates
+
+The sidebar offers **Documents**, **Downloads**, **Media** and **AppData** as
+fixed shortcuts, so on startup the app creates any of them that is missing,
+owned by `PUID:PGID` with `DIR_MODE`. A provisioned PCS already has them; a bare
+bind mount, a recycled demo instance or a developer's `./DATA` does not, and
+there the shortcuts used to dead-end on `no such file or directory`.
+
+A directory that already exists is left completely alone — not re-owned, not
+re-chmodded — so an existing `Documents` belonging to another uid survives a
+restart untouched. Nothing else is created: no `Gallery`, and no directory the
+sidebar does not link to.
+
+Failure is never fatal. A read-only data root is a deployment worth serving, so
+the app logs what it could not create and carries on.
+
 ---
 
 ## Deployment on a PCS

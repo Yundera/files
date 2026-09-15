@@ -12,6 +12,7 @@
   import UploadTray from './lib/components/UploadTray.svelte'
   import Viewer from './lib/components/Viewer.svelte'
   import SearchResults from './lib/components/SearchResults.svelte'
+  import Icon from './lib/components/Icon.svelte'
   import { search } from './lib/search.svelte'
   import DropZone from './lib/components/DropZone.svelte'
   import { uploads } from './lib/uploads.svelte'
@@ -168,22 +169,58 @@
         </div>
         <JobTray />
         {#if clipboard.has}
-          <button class="ghost" onclick={() => act.paste('keepBoth').catch((e) => setStatus(e.message))}>
-            Paste ({clipboard.paths.length})
+          <button
+            class="ghost"
+            title="Paste {clipboard.paths.length} item{clipboard.paths.length === 1 ? '' : 's'}"
+            aria-label="Paste {clipboard.paths.length} item{clipboard.paths.length === 1 ? '' : 's'}"
+            onclick={() => act.paste('keepBoth').catch((e) => setStatus(e.message))}
+          >
+            <Icon name="paste" />
+            <span class="badge">{clipboard.paths.length}</span>
           </button>
         {/if}
-        <button class="ghost" onclick={() => pick(filePicker)}>Upload Files</button>
-        <button class="ghost" onclick={() => pick(folderPicker)}>Upload Folder</button>
-        <button class="ghost" onclick={() => (prompt = { kind: 'newFolder' })}>New Folder</button>
-        <button class="ghost" onclick={() => browse.toggleHidden()}>
-          {browse.hidden ? 'Hide hidden' : 'Show hidden'}
+        <button
+          class="ghost"
+          title="Upload files"
+          aria-label="Upload files"
+          onclick={() => pick(filePicker)}
+        >
+          <Icon name="uploadFile" />
         </button>
         <button
           class="ghost"
-          title="Change View"
+          title="Upload a folder"
+          aria-label="Upload a folder"
+          onclick={() => pick(folderPicker)}
+        >
+          <Icon name="uploadFolder" />
+        </button>
+        <button
+          class="ghost"
+          title="New folder"
+          aria-label="New folder"
+          onclick={() => (prompt = { kind: 'newFolder' })}
+        >
+          <Icon name="folderPlus" />
+        </button>
+        <span class="sep" aria-hidden="true"></span>
+        <button
+          class="ghost"
+          class:on={browse.hidden}
+          title={browse.hidden ? 'Hide hidden files' : 'Show hidden files'}
+          aria-label={browse.hidden ? 'Hide hidden files' : 'Show hidden files'}
+          aria-pressed={browse.hidden}
+          onclick={() => browse.toggleHidden()}
+        >
+          <Icon name={browse.hidden ? 'eyeOff' : 'eye'} />
+        </button>
+        <button
+          class="ghost"
+          title={browse.view === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+          aria-label={browse.view === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
           onclick={() => browse.setView(browse.view === 'grid' ? 'list' : 'grid')}
         >
-          {browse.view === 'grid' ? 'List' : 'Grid'}
+          <Icon name={browse.view === 'grid' ? 'list' : 'grid'} />
         </button>
       </div>
     </header>
@@ -300,14 +337,27 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    flex-shrink: 0;
+    /* Shrinks, but never below the buttons: the search field is the elastic part
+       of the row. Pinned at flex-shrink: 0 the whole row held its width and the
+       breadcrumb absorbed every pixel of the loss, down to nothing. */
+    flex-shrink: 1;
+    min-width: 0;
   }
+  /* Icon buttons, not text ones. Five labelled actions plus the search field ran
+     the breadcrumb off the header at anything under ~1400px — at 900px the
+     breadcrumb disappeared entirely and the last button was clipped. Each button
+     carries a `title` and an `aria-label`, so the meaning is still there for a
+     hover and for a screen reader. */
   .ghost {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
     border: 0;
     background: transparent;
     color: var(--breadcrumb-link);
-    font-size: var(--font-base);
-    padding: 0.25rem 0.5rem;
     border-radius: var(--radius-small);
     transition: all 0.25s;
   }
@@ -315,15 +365,50 @@
     background: var(--sidebar-bg);
     color: var(--primary);
   }
+  .ghost:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -1px;
+  }
+  /* Hidden-files is a toggle, so it has to read as on or off, not merely as a
+     glyph that swapped to one the user has never seen before. */
+  .ghost.on {
+    color: var(--primary);
+    background: var(--primary-light);
+  }
+  /* How many items are on the clipboard — the one thing an icon cannot say. */
+  .badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: 14px;
+    padding: 0 3px;
+    border-radius: 7px;
+    background: var(--primary);
+    color: var(--text-on-accent);
+    font-size: 10px;
+    line-height: 14px;
+    text-align: center;
+  }
+  .sep {
+    width: 1px;
+    height: 1.25rem;
+    background: var(--border);
+    margin: 0 0.25rem;
+  }
   .search {
     position: relative;
     display: flex;
     align-items: center;
   }
+  .search {
+    min-width: 0;
+  }
   .search input {
     font: inherit;
     font-size: var(--font-base);
     width: 14rem;
+    min-width: 6rem;
+    max-width: 100%;
     padding: 0.3rem 1.75rem 0.3rem 0.625rem;
     border: 1px solid var(--border);
     border-radius: 9999px;

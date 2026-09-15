@@ -20,6 +20,10 @@
     position: relative;
     max-width: calc(100% - 1.5rem);
     overflow: hidden;
+    /* Without this the nav is a flex item with the default `min-width: auto`, so
+       it refuses to shrink below its content and the leaf is chopped off mid-word
+       by the header instead of ellipsised by the rule below. */
+    min-width: 0;
   }
   ul {
     display: flex;
