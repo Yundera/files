@@ -1,9 +1,9 @@
 <script lang="ts">
   import TextEditor from './TextEditor.svelte'
-  import { rawUrl } from '../api'
+  import { api, ApiError, rawUrl } from '../api'
   import { size as fmtSize, date } from '../format'
   import { iconFor } from '../icons'
-  import type { Entry } from '../types'
+  import type { Entry, TextDoc } from '../types'
 
   interface Props {
     entry: Entry
@@ -18,25 +18,43 @@
   const VIDEO = ['mp4', 'webm', 'ogv', 'mov', 'm4v', 'mkv']
   const AUDIO = ['mp3', 'ogg', 'wav', 'flac', 'm4a', 'aac', 'opus']
   const PDF = ['pdf']
-  // Everything the editor will accept. Extensionless build files are included by
-  // name because a Dockerfile has no extension to match on.
-  const TEXT_NAMES = ['dockerfile', 'makefile', 'caddyfile', 'readme', 'license']
-  const TEXT = [
-    'txt', 'log', 'md', 'markdown', 'yml', 'yaml', 'json', 'jsonld', 'xml', 'html', 'htm',
-    'css', 'scss', 'less', 'js', 'mjs', 'cjs', 'ts', 'jsx', 'tsx', 'sh', 'bash', 'zsh',
-    'env', 'conf', 'config', 'ini', 'cfg', 'toml', 'service', 'py', 'go', 'rs', 'rb', 'pl',
-    'c', 'h', 'cpp', 'cs', 'java', 'sql', 'csv', 'tsv', 'srt', 'vue', 'svelte', 'gitignore',
-  ]
 
   const ext = $derived((entry.ext ?? '').toLowerCase())
-  const kind = $derived.by(() => {
+  const media = $derived.by(() => {
     if (IMAGE.includes(ext)) return 'image'
     if (VIDEO.includes(ext)) return 'video'
     if (AUDIO.includes(ext)) return 'audio'
     if (PDF.includes(ext)) return 'pdf'
-    if (TEXT.includes(ext) || TEXT_NAMES.includes(entry.name.toLowerCase())) return 'text'
-    return 'none'
+    return null
   })
+
+  // Anything that is not media is offered to the editor, and the server decides.
+  // It sniffs the content and refuses binary (415) or oversized (413) files, so
+  // a .env, a .bashrc or an extensionless config opens without an allowlist of
+  // names to keep up to date — and a name never makes a binary file editable.
+  let doc = $state<TextDoc | null>(null)
+  /** Why the editor was refused: '' for "not text", otherwise a sentence. */
+  let refusal = $state<string | null>(null)
+
+  $effect(() => {
+    if (media) return
+    const path = entry.path
+    let cancelled = false
+    api
+      .get<TextDoc>(`/api/file/text?path=${encodeURIComponent(path)}`)
+      .then((d) => {
+        if (!cancelled) doc = d
+      })
+      .catch((e) => {
+        if (cancelled) return
+        refusal = e instanceof ApiError && e.status === 415 ? '' : e instanceof Error ? e.message : String(e)
+      })
+    return () => {
+      cancelled = true
+    }
+  })
+
+  const kind = $derived(media ?? (doc ? 'text' : refusal !== null ? 'none' : 'loading'))
 
   // inline=1 is only honoured by the server for media types it considers safe;
   // anything else downloads regardless of what is asked for here.
@@ -58,8 +76,8 @@
 ></div>
 
 <div class="viewer" class:full={kind === 'text'} role="dialog" aria-label={entry.name}>
-  {#if kind === 'text'}
-    <TextEditor {entry} {onclose} {onstatus} />
+  {#if kind === 'text' && doc}
+    <TextEditor {entry} {doc} {onclose} {onstatus} />
   {:else}
     <div class="bar">
       <span class="name one-line">{entry.name}</span>
@@ -84,10 +102,12 @@
         <!-- The browser's own PDF viewer. Range requests from /api/fs/raw are
              what make page-jumps work without downloading the whole file. -->
         <iframe {src} title={entry.name}></iframe>
+      {:else if kind === 'loading'}
+        <p class="meta">Opening…</p>
       {:else}
         <div class="none">
           <img src={iconFor(entry)} alt="" />
-          <p>No preview for this file type.</p>
+          <p>{refusal || 'No preview for this file type.'}</p>
           <p class="meta">{fmtSize(entry.size)} · {date(entry.modTime)}</p>
           <a class="primary" href={rawUrl(entry.path)} download={entry.name}>Download</a>
         </div>

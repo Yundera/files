@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { api, ApiError } from '../api'
   import type { EditorHandle } from '../editor'
-  import type { Entry } from '../types'
+  import type { Entry, TextDoc } from '../types'
 
   // CodeMirror and its language modes are ~800 kB, and marked + DOMPurify add
   // more. Importing them statically would put all of it in the initial bundle,
@@ -11,24 +12,20 @@
   const loadEditor = () => import('../editor')
   const loadMarkdown = () => import('../markdown')
 
-  interface Doc {
-    path: string
-    content: string
-    modTime: string
-    size: number
-    language: string
-  }
-
   interface Props {
     entry: Entry
+    /** Already loaded by the Viewer, which needs the server's verdict on
+     *  whether the file is text before it can choose to show an editor. */
+    doc: TextDoc
     onclose: () => void
     onstatus: (msg: string) => void
   }
-  let { entry, onclose, onstatus }: Props = $props()
+  let { entry, doc: loaded, onclose, onstatus }: Props = $props()
 
   let host: HTMLDivElement | undefined = $state()
   let handle: EditorHandle | undefined
-  let doc = $state<Doc | null>(null)
+  // A copy, because a save carries the new mtime forward on it.
+  let doc = $state<TextDoc>(untrack(() => ({ ...loaded })))
   let loadError = $state<string | null>(null)
   let dirty = $state(false)
   let saving = $state(false)
@@ -36,28 +33,15 @@
   let preview = $state(false)
   let previewHtml = $state('')
 
-  const isMarkdown = $derived(doc?.language === 'markdown')
+  const isMarkdown = $derived(doc.language === 'markdown')
 
+  // Mount CodeMirror once the host element exists. It reads the prop, not
+  // `doc`: a save reassigns `doc`, and depending on it would tear the editor
+  // down and remount it with the content as first loaded.
   $effect(() => {
-    let cancelled = false
-    api
-      .get<Doc>(`/api/file/text?path=${encodeURIComponent(entry.path)}`)
-      .then((d) => {
-        if (!cancelled) doc = d
-      })
-      .catch((e) => {
-        if (!cancelled) loadError = e instanceof Error ? e.message : String(e)
-      })
-    return () => {
-      cancelled = true
-    }
-  })
-
-  // Mount CodeMirror once the document has arrived and the host element exists.
-  $effect(() => {
-    if (!doc || !host || handle) return
+    if (!host || handle) return
     const el = host
-    const d = doc
+    const d = loaded
     let disposed = false
     loadEditor()
       .then(({ createEditor }) => {
@@ -87,7 +71,7 @@
   })
 
   async function save() {
-    if (!doc || !handle || saving) return
+    if (!handle || saving) return
     saving = true
     syntaxError = null
     try {
@@ -158,8 +142,6 @@
 
   {#if loadError}
     <p class="error">{loadError}</p>
-  {:else if !doc}
-    <p class="muted">Loading…</p>
   {:else}
     <div class="panes" class:split={preview}>
       <div class="pane" bind:this={host}></div>
@@ -263,10 +245,6 @@
   }
   .error {
     color: var(--red);
-    padding: 1.5rem;
-  }
-  .muted {
-    color: var(--text-muted);
     padding: 1.5rem;
   }
 </style>

@@ -11,6 +11,15 @@ export interface Entry {
   thumb?: boolean
 }
 
+/** A file opened for editing, as GET /api/file/text returns it. */
+export interface TextDoc {
+  path: string
+  content: string
+  modTime: string
+  size: number
+  language: string
+}
+
 export interface Page {
   path: string
   entries: Entry[]

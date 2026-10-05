@@ -58,8 +58,9 @@ export function iconFor(entry: Entry): string {
   if (entry.kind === 'dir') return url(folderByName[entry.name] ?? 'folder-default')
   const ext = (entry.ext ?? '').toLowerCase()
   // CasaOS matches on the whole lowercased filename for extensionless build
-  // files, which is how "Dockerfile" and "Makefile" get an icon at all.
-  const key = ext || entry.name.toLowerCase()
+  // files, which is how "Dockerfile" and "Makefile" get an icon at all. A
+  // dotfile has no extension either; ".env" is keyed as "env".
+  const key = ext || entry.name.toLowerCase().replace(/^\./, '')
   let icon = 'unknown'
   for (const [name, exts] of typeMap) if (exts.includes(key)) icon = name
   return url(icon)
