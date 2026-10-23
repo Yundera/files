@@ -4,6 +4,7 @@
   import { iconFor } from '../icons'
   import { date, size } from '../format'
   import type { Entry } from '../types'
+  import { isTouch } from '../media.svelte'
 
   interface Props {
     onopen: (entry: Entry) => void
@@ -43,8 +44,8 @@
         class="row"
         role="button"
         tabindex="0"
-        ondblclick={() => onopen(entry)}
-        onclick={() => browse.selectOnly(entry.path)}
+        ondblclick={(e) => !isTouch(e) && onopen(entry)}
+        onclick={(e) => (isTouch(e) ? onopen(entry) : browse.selectOnly(entry.path))}
         onkeydown={(e) => e.key === 'Enter' && onopen(entry)}
       >
         <img class="cover" src={iconFor(entry)} alt="" />
@@ -92,8 +93,10 @@
     color: inherit;
     cursor: pointer;
   }
-  .row:hover {
-    background: var(--sidebar-bg);
+  @media (hover: hover) {
+    .row:hover {
+      background: var(--sidebar-bg);
+    }
   }
   .cover {
     width: 2rem;
@@ -114,9 +117,11 @@
     text-align: left;
     padding: 0;
   }
-  .where:hover {
-    color: var(--primary);
-    text-decoration: underline;
+  @media (hover: hover) {
+    .where:hover {
+      color: var(--primary);
+      text-decoration: underline;
+    }
   }
   .when {
     width: 9rem;
@@ -128,6 +133,34 @@
     width: 4rem;
     flex-shrink: 0;
     font-size: var(--font-meta);
+  }
+  /* Phone: the containing folder drops under the name, date and size go. A grid
+     rather than new markup, so the desktop row is the same elements as before. */
+  @media (max-width: 768px) {
+    .results {
+      padding: 0 1rem 1rem;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 2rem minmax(0, 1fr);
+      column-gap: 0.75rem;
+      row-gap: 0;
+      align-content: center;
+    }
+    .cover {
+      grid-row: span 2;
+    }
+    .name,
+    .where {
+      min-width: 0;
+    }
+    .where {
+      min-height: 0;
+    }
+    .when,
+    .size {
+      display: none;
+    }
   }
   .empty,
   .error {

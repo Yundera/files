@@ -87,6 +87,18 @@
   --list-header-height: 42px;
 }
 
+/* Phone widths. 144px columns give two tiles across a 390px screen with most of
+   it empty; 104px gives three, which is what a phone file app shows. Rows grow
+   so a two-line list cell (name over size · date) still fits a thumb. */
+@media (max-width: 768px) {
+  :root {
+    --grid-pitch: 104px;
+    --grid-row-height: 156px;
+    --grid-tile-width: 96px;
+    --list-row-height: 3.5rem;
+  }
+}
+
 @font-face {
   font-family: BrittiSans;
   font-display: swap;

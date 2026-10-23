@@ -101,13 +101,15 @@
   {:else}
     <div class="rows">
       {#each items as item (item.id)}
-        <div class="row" class:active={selected.has(item.id)}>
+        <!-- A <label>, so the whole row is the checkbox's hit area — a finger
+             cannot reliably land on a 13px box. -->
+        <label class="row" class:active={selected.has(item.id)}>
           <input type="checkbox" checked={selected.has(item.id)} onchange={() => toggle(item.id)} />
           <span class="name one-line">{item.name}</span>
           <span class="from one-line" title={item.originalPath}>{item.originalPath}</span>
           <span class="when">{date(item.deletedAt)}</span>
           <span class="size">{item.isDir ? '' : size(item.size)}</span>
-        </div>
+        </label>
       {/each}
     </div>
     <p class="note">
@@ -146,8 +148,10 @@
   .ghost.danger {
     color: var(--red);
   }
-  .ghost:hover {
-    background: var(--surface-3);
+  @media (hover: hover) {
+    .ghost:hover {
+      background: var(--surface-3);
+    }
   }
   .row {
     display: flex;
@@ -179,6 +183,40 @@
     width: 4rem;
     flex-shrink: 0;
     font-size: var(--font-meta);
+  }
+  /* Phone: name over original location, the date and size columns gone; the
+     action buttons wrap under the title instead of pushing it off the row. */
+  @media (max-width: 768px) {
+    .trash {
+      padding: 0 1rem 1rem;
+    }
+    .bar {
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .ghost {
+      min-height: 36px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      column-gap: 0.75rem;
+      row-gap: 0;
+      align-content: center;
+    }
+    .row input {
+      grid-row: span 2;
+      width: 20px;
+      height: 20px;
+    }
+    .name,
+    .from {
+      min-width: 0;
+    }
+    .when,
+    .size {
+      display: none;
+    }
   }
   .empty,
   .note {

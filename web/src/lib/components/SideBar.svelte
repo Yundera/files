@@ -1,6 +1,12 @@
 <script lang="ts">
   import { browse, roots, TRASH_PATH } from '../browse.svelte'
   import { rootIcon } from '../icons'
+
+  interface Props {
+    /** After a root is chosen: on a phone the drawer closes itself. */
+    onnavigate?: () => void
+  }
+  let { onnavigate }: Props = $props()
 </script>
 
 <!-- 15rem fixed, #f8f8f8. The Files tree in CasaOS is FLAT — no nesting, no
@@ -14,7 +20,7 @@
           <button
             class="list-item"
             class:active={browse.path === root.path}
-            onclick={() => browse.load(root.path)}
+            onclick={() => (browse.load(root.path), onnavigate?.())}
           >
             <img class="cover" src={rootIcon(root.name)} alt="" />
             <span class="one-line">{root.name}</span>
@@ -30,7 +36,7 @@
     <button
       class="list-item"
       class:active={browse.path === TRASH_PATH}
-      onclick={() => browse.openTrash()}
+      onclick={() => (browse.openTrash(), onnavigate?.())}
     >
       <span class="cover trash-glyph">🗑</span>
       <span class="one-line">Trash</span>
@@ -76,11 +82,24 @@
     text-align: left;
     transition: all 0.2s;
   }
-  .list-item:hover {
-    background: var(--sidebar-hover);
+  @media (hover: hover) {
+    .list-item:hover {
+      background: var(--sidebar-hover);
+    }
   }
   .list-item.active {
     background: var(--sidebar-active);
+  }
+  /* A drawer is drawn over content and reaches the phone's bottom edge. */
+  @media (max-width: 768px) {
+    .nav-bar {
+      height: 100%;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .list-item {
+      min-height: 48px;
+    }
   }
   .bottom-area {
     margin-top: auto;

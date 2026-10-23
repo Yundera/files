@@ -1,6 +1,15 @@
 <script lang="ts">
   import { browse, crumbs } from '../browse.svelte'
-  const items = $derived(crumbs(browse.path))
+  import { media } from '../media.svelte'
+  import Sheet from './Sheet.svelte'
+
+  const all = $derived(crumbs(browse.path))
+  // A phone has room for the parent and the leaf. Everything above them, Root
+  // included, folds into one leading "…" that lists the hidden levels — Root is
+  // also a tap away in the drawer, while the leaf is the one name that matters.
+  const folded = $derived(media.mobile && all.length > 3 ? all.slice(0, -2) : [])
+  const items = $derived(folded.length > 0 ? all.slice(-2) : all)
+  let showFolded = $state(false)
 </script>
 
 <!-- Separator is a literal ">" in ::before, as in CasaOS — not an icon. The LEAF
@@ -8,12 +17,29 @@
 <nav class="breadcrumb-container">
   <ul>
     {#each items as item, i (item.path)}
+      {#if i === 0 && folded.length > 0}
+        <li>
+          <button class="ellipsis" aria-label="Show parent folders" onclick={() => (showFolded = true)}>
+            …
+          </button>
+        </li>
+      {/if}
       <li class:last={i === items.length - 1}>
         <button onclick={() => browse.load(item.path)}>{item.name}</button>
       </li>
     {/each}
   </ul>
 </nav>
+
+{#if showFolded}
+  <Sheet title="Go to" onclose={() => (showFolded = false)}>
+    {#each folded as item (item.path)}
+      <button onclick={() => ((showFolded = false), browse.load(item.path))}>
+        {item.path === '/' ? 'Root' : item.path}
+      </button>
+    {/each}
+  </Sheet>
+{/if}
 
 <style>
   .breadcrumb-container {
@@ -72,8 +98,20 @@
   li:first-child button {
     margin-left: 0;
   }
-  button:hover {
-    color: var(--primary);
-    background: var(--primary-light);
+  @media (hover: hover) {
+    button:hover {
+      color: var(--primary);
+      background: var(--primary-light);
+    }
+  }
+  .ellipsis {
+    color: var(--breadcrumb-link);
+  }
+  @media (max-width: 768px) {
+    button {
+      min-height: 36px;
+      padding: 0 0.375em;
+      margin-left: 0.125em;
+    }
   }
 </style>

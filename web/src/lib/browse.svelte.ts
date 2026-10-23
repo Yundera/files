@@ -1,6 +1,7 @@
 // Browsing state. Svelte 5 runes in a .svelte.ts module, so any component can
 // import the same live values without a store subscription.
 import { api } from './api'
+import { isTouch } from './media.svelte'
 import type { Entry, Page, SortKey, ViewMode } from './types'
 
 export const TRASH_PATH = '__trash__'
@@ -37,9 +38,11 @@ class BrowseState {
    *  user clicks through folders faster than the server answers. */
   #seq = 0
 
-  async load(path = this.path) {
+  /** `push: false` is for a load that came FROM history (Back/Forward), which
+   *  must not stack another entry on top of the one it just restored. */
+  async load(path = this.path, push = true) {
     if (path === TRASH_PATH) {
-      this.openTrash()
+      this.openTrash(push)
       return
     }
     const mine = ++this.#seq
@@ -55,6 +58,7 @@ class BrowseState {
       const page = await api.get<Page>(`/api/fs/list?${q}`)
       if (mine !== this.#seq) return
       this.path = page.path
+      remember(page.path, push)
       this.entries = page.entries
       this.total = page.total
       this.truncated = page.truncated ?? false
@@ -72,8 +76,9 @@ class BrowseState {
   /** The Trash view is not a directory, so it gets a sentinel path rather than
    *  a load. Using a sentinel keeps one "where am I" value instead of a second
    *  mode flag that every component would have to check. */
-  openTrash() {
+  openTrash(push = true) {
     this.path = TRASH_PATH
+    remember(TRASH_PATH, push)
     this.entries = []
     this.selected = new Set()
     this.error = null
@@ -121,9 +126,33 @@ class BrowseState {
     this.selected = new Set([path])
   }
 
+  /** The tap rule every listing shares. On touch a tap opens, unless a
+   *  long-press has started a selection — then taps add and remove. A mouse
+   *  keeps the desktop rule: click selects, ctrl/cmd-click toggles, and opening
+   *  is the double-click's job. */
+  tap(e: MouseEvent, path: string, open: () => void) {
+    if (isTouch(e)) {
+      if (this.selected.size > 0) this.toggle(path)
+      else open()
+    } else if (e.ctrlKey || e.metaKey) this.toggle(path)
+    else this.selectOnly(path)
+  }
+
   selectAll(on: boolean) {
     this.selected = on ? new Set(this.entries.map((e) => e.path)) : new Set()
   }
+}
+
+/** Folder navigation as browser history, so Back — the phone's back gesture
+ *  above all — goes up to where you were instead of leaving the app. A reload
+ *  of an unchanged folder adds nothing. The first load replaces rather than
+ *  pushes, or Back from the start folder would land on itself. */
+function remember(path: string, push: boolean) {
+  const state = history.state as { path?: string; view?: string } | null
+  if (state?.path === path && !state.view) return
+  const next = { path }
+  if (push && state?.path !== undefined) history.pushState(next, '')
+  else history.replaceState(next, '')
 }
 
 export const browse = new BrowseState()

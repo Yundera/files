@@ -13,6 +13,8 @@
   import Viewer from './lib/components/Viewer.svelte'
   import SearchResults from './lib/components/SearchResults.svelte'
   import Icon from './lib/components/Icon.svelte'
+  import Sheet from './lib/components/Sheet.svelte'
+  import { isTouch, media } from './lib/media.svelte'
   import { search } from './lib/search.svelte'
   import DropZone from './lib/components/DropZone.svelte'
   import { uploads } from './lib/uploads.svelte'
@@ -20,7 +22,7 @@
   import { clipboard } from './lib/clipboard.svelte'
   import { live } from './lib/live.svelte'
   import * as act from './lib/actions'
-  import type { Entry } from './lib/types'
+  import type { Entry, SortKey } from './lib/types'
 
   browse.load('/')
   live.connect()
@@ -29,6 +31,11 @@
   let prompt = $state<{ kind: 'newFile' | 'newFolder' | 'rename'; entry?: Entry } | null>(null)
   let viewing = $state<Entry | null>(null)
   let status = $state<string | null>(null)
+  // Phone-only chrome: the sidebar as a drawer, the search field folded behind
+  // an icon, and the header actions that no longer fit behind a ⋯ sheet.
+  let drawerOpen = $state(false)
+  let searchOpen = $state(false)
+  let moreOpen = $state(false)
   let statusTimer: ReturnType<typeof setTimeout> | undefined
 
   // Two hidden inputs rather than one: `webkitdirectory` is what turns a file
@@ -73,16 +80,63 @@
       search.clear()
       browse.open(entry)
     } else {
-      viewing = entry
+      showEntry(entry)
     }
   }
 
   function openMenu(e: MouseEvent, entry: Entry | null) {
     e.preventDefault()
     e.stopPropagation()
-    if (entry && !browse.isSelected(entry.path)) browse.selectOnly(entry.path)
+    // A mouse right-click selects what it lands on, as on desktop. A finger's ⋮
+    // must not: on touch any selection is selection mode, and the menu closing
+    // would leave the user in it without having asked.
+    if (entry && !browse.isSelected(entry.path) && !isTouch(e)) browse.selectOnly(entry.path)
     menu = { x: e.clientX, y: e.clientY, entry }
   }
+
+  // ── Viewer as a history entry ────────────────────────────────────────────
+  // On a phone the back gesture is how anything full-screen is closed. Opening a
+  // file therefore pushes an entry that Back pops, and closing it any other way
+  // pops that entry too, so Back afterwards goes up a folder as expected.
+  type NavState = { path?: string; view?: string } | null
+
+  function showEntry(entry: Entry) {
+    viewing = entry
+    history.pushState({ path: browse.path, view: entry.path }, '')
+  }
+
+  function closeViewer() {
+    if ((history.state as NavState)?.view) history.back()
+    else viewing = null
+  }
+
+  function onPop(e: PopStateEvent) {
+    const state = e.state as NavState
+    if (!state?.view) viewing = null
+    else viewing = viewable().find((v) => v.path === state.view) ?? null
+    if (state?.path !== undefined && state.path !== browse.path) browse.load(state.path, false)
+  }
+
+  /** What the viewer swipes through: the files of whatever is on screen. */
+  function viewable() {
+    return (search.active ? search.results : browse.entries).filter((e) => e.kind !== 'dir')
+  }
+
+  function stepViewer(delta: number) {
+    if (!viewing) return
+    const files = viewable()
+    const next = files[files.findIndex((f) => f.path === viewing!.path) + delta]
+    if (!next) return
+    viewing = next
+    history.replaceState({ path: browse.path, view: next.path }, '')
+  }
+
+  const sortKeys: Array<{ key: SortKey; label: string }> = [
+    { key: 'name', label: 'Name' },
+    { key: 'modified', label: 'Date modified' },
+    { key: 'size', label: 'Size' },
+    { key: 'kind', label: 'Type' },
+  ]
 
   async function submitPrompt(value: string) {
     const p = prompt
@@ -135,16 +189,33 @@
   const inTrash = $derived(browse.path === '__trash__')
 </script>
 
-<svelte:window onkeydown={onKey} />
+<svelte:window onkeydown={onKey} onpopstate={onPop} />
 
 <input bind:this={filePicker} type="file" multiple hidden onchange={onPicked} />
 <input bind:this={folderPicker} type="file" webkitdirectory hidden onchange={onPicked} />
 
-<div class="file-panel">
-  <SideBar />
+<div
+  class="file-panel"
+  style:--bottom-bar={media.mobile && selectedEntries.length > 0 && !inTrash && !search.active
+    ? 'calc(60px + env(safe-area-inset-bottom))'
+    : '0px'}
+>
+  <!-- On desktop .drawer is display: contents, so the sidebar sits in the row
+       exactly as before; on a phone it is an off-canvas panel over the files. -->
+  <div class="drawer" class:open={drawerOpen}>
+    <SideBar onnavigate={() => (drawerOpen = false)} />
+  </div>
+  {#if media.mobile && drawerOpen}
+    <div class="drawer-scrim" role="presentation" onclick={() => (drawerOpen = false)}></div>
+  {/if}
 
   <div class="content">
-    <header>
+    <header class:searching={media.mobile && searchOpen}>
+      {#if media.mobile}
+        <button class="ghost burger" aria-label="Locations" onclick={() => (drawerOpen = true)}>
+          <Icon name="menu" />
+        </button>
+      {/if}
       {#if inTrash}
         <strong>Trash</strong>
       {:else}
@@ -167,6 +238,32 @@
             <button class="clear" title="Clear search" onclick={() => search.clear()}>✕</button>
           {/if}
         </div>
+        {#if media.mobile}
+          {#if searchOpen}
+            <button
+              class="ghost close-search"
+              aria-label="Close search"
+              onclick={() => ((searchOpen = false), search.clear())}
+            >
+              <Icon name="close" />
+            </button>
+          {:else}
+            <button
+              class="ghost"
+              aria-label="Search"
+              disabled={inTrash}
+              onclick={() => {
+                searchOpen = true
+                // After the field is shown, or there is nothing to focus yet.
+                requestAnimationFrame(() =>
+                  document.querySelector<HTMLInputElement>('.search input')?.focus(),
+                )
+              }}
+            >
+              <Icon name="search" />
+            </button>
+          {/if}
+        {/if}
         <JobTray />
         {#if clipboard.has}
           <button
@@ -179,49 +276,57 @@
             <span class="badge">{clipboard.paths.length}</span>
           </button>
         {/if}
-        <button
-          class="ghost"
-          title="Upload files"
-          aria-label="Upload files"
-          onclick={() => pick(filePicker)}
-        >
-          <Icon name="uploadFile" />
-        </button>
-        <button
-          class="ghost"
-          title="Upload a folder"
-          aria-label="Upload a folder"
-          onclick={() => pick(folderPicker)}
-        >
-          <Icon name="uploadFolder" />
-        </button>
-        <button
-          class="ghost"
-          title="New folder"
-          aria-label="New folder"
-          onclick={() => (prompt = { kind: 'newFolder' })}
-        >
-          <Icon name="folderPlus" />
-        </button>
-        <span class="sep" aria-hidden="true"></span>
-        <button
-          class="ghost"
-          class:on={browse.hidden}
-          title={browse.hidden ? 'Hide hidden files' : 'Show hidden files'}
-          aria-label={browse.hidden ? 'Hide hidden files' : 'Show hidden files'}
-          aria-pressed={browse.hidden}
-          onclick={() => browse.toggleHidden()}
-        >
-          <Icon name={browse.hidden ? 'eyeOff' : 'eye'} />
-        </button>
-        <button
-          class="ghost"
-          title={browse.view === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
-          aria-label={browse.view === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
-          onclick={() => browse.setView(browse.view === 'grid' ? 'list' : 'grid')}
-        >
-          <Icon name={browse.view === 'grid' ? 'list' : 'grid'} />
-        </button>
+        {#if !(media.mobile && inTrash)}
+          <button
+            class="ghost"
+            title="Upload files"
+            aria-label="Upload files"
+            onclick={() => pick(filePicker)}
+          >
+            <Icon name="uploadFile" />
+          </button>
+        {/if}
+        {#if media.mobile}
+          <button class="ghost" aria-label="More actions" onclick={() => (moreOpen = true)}>
+            <Icon name="more" />
+          </button>
+        {:else}
+          <button
+            class="ghost"
+            title="Upload a folder"
+            aria-label="Upload a folder"
+            onclick={() => pick(folderPicker)}
+          >
+            <Icon name="uploadFolder" />
+          </button>
+          <button
+            class="ghost"
+            title="New folder"
+            aria-label="New folder"
+            onclick={() => (prompt = { kind: 'newFolder' })}
+          >
+            <Icon name="folderPlus" />
+          </button>
+          <span class="sep" aria-hidden="true"></span>
+          <button
+            class="ghost"
+            class:on={browse.hidden}
+            title={browse.hidden ? 'Hide hidden files' : 'Show hidden files'}
+            aria-label={browse.hidden ? 'Hide hidden files' : 'Show hidden files'}
+            aria-pressed={browse.hidden}
+            onclick={() => browse.toggleHidden()}
+          >
+            <Icon name={browse.hidden ? 'eyeOff' : 'eye'} />
+          </button>
+          <button
+            class="ghost"
+            title={browse.view === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+            aria-label={browse.view === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+            onclick={() => browse.setView(browse.view === 'grid' ? 'list' : 'grid')}
+          >
+            <Icon name={browse.view === 'grid' ? 'list' : 'grid'} />
+          </button>
+        {/if}
       </div>
     </header>
 
@@ -271,7 +376,10 @@
         {/if}
 
         {#if !inTrash && !search.active}
-          <OperationToolbar onstatus={setStatus} />
+          <OperationToolbar
+            onstatus={setStatus}
+            onmore={(e) => selectedEntries[0] && openMenu(e, selectedEntries[0])}
+          />
         {/if}
       </div>
       <UploadTray />
@@ -284,7 +392,57 @@
 </div>
 
 {#if viewing}
-  <Viewer entry={viewing} onclose={() => (viewing = null)} onstatus={setStatus} />
+  <!-- Keyed: stepping to the next file is a fresh viewer, not the previous one's
+       loaded text or refusal carried over to a different file. -->
+  {#key viewing.path}
+    <Viewer entry={viewing} onclose={closeViewer} onstatus={setStatus} onnav={stepViewer} />
+  {/key}
+{/if}
+
+{#if moreOpen}
+  <Sheet onclose={() => (moreOpen = false)}>
+    {#if !inTrash}
+      <button onclick={() => ((moreOpen = false), (prompt = { kind: 'newFolder' }))}>
+        <Icon name="folderPlus" /> New folder
+      </button>
+      <button onclick={() => ((moreOpen = false), (prompt = { kind: 'newFile' }))}>
+        <Icon name="filePlus" /> New file
+      </button>
+      {#if !media.touch}
+        <button onclick={() => ((moreOpen = false), pick(folderPicker))}>
+          <Icon name="uploadFolder" /> Upload a folder
+        </button>
+      {/if}
+      {#if clipboard.has}
+        <button onclick={() => ((moreOpen = false), act.paste('overwrite').catch((e) => setStatus(e.message)))}>
+          <Icon name="paste" /> Paste - Overwrite
+        </button>
+        <button onclick={() => ((moreOpen = false), act.paste('skip').catch((e) => setStatus(e.message)))}>
+          <Icon name="paste" /> Paste - Skip
+        </button>
+      {/if}
+      <hr />
+    {/if}
+    <button onclick={() => ((moreOpen = false), browse.setView(browse.view === 'grid' ? 'list' : 'grid'))}>
+      <Icon name={browse.view === 'grid' ? 'list' : 'grid'} />
+      {browse.view === 'grid' ? 'List view' : 'Grid view'}
+    </button>
+    <button class:on={browse.hidden} onclick={() => ((moreOpen = false), browse.toggleHidden())}>
+      <Icon name={browse.hidden ? 'eyeOff' : 'eye'} />
+      {browse.hidden ? 'Hide hidden files' : 'Show hidden files'}
+    </button>
+    <hr />
+    <!-- The list view's sortable header is hidden on a phone, so sorting lives
+         here. Tapping the current key flips the order, as the header does. -->
+    {#each sortKeys as s (s.key)}
+      <button class:on={browse.sort === s.key} onclick={() => ((moreOpen = false), browse.setSort(s.key))}>
+        <span class="sort-mark">{browse.sort === s.key ? (browse.desc ? '↓' : '↑') : ''}</span>
+        Sort by {s.label}
+      </button>
+    {/each}
+    <hr />
+    <button onclick={() => ((moreOpen = false), browse.load())}><Icon name="refresh" /> Refresh</button>
+  </Sheet>
 {/if}
 
 {#if menu}
@@ -316,7 +474,12 @@
   .file-panel {
     display: flex;
     height: 100vh;
+    /* dvh: on iOS 100vh reaches behind the address bar, hiding the bottom edge. */
+    height: 100dvh;
     background: var(--surface);
+  }
+  .drawer {
+    display: contents;
   }
   .content {
     flex: 1 1 auto;
@@ -361,9 +524,14 @@
     border-radius: var(--radius-small);
     transition: all 0.25s;
   }
-  .ghost:hover {
-    background: var(--sidebar-bg);
-    color: var(--primary);
+  @media (hover: hover) {
+    .ghost:hover {
+      background: var(--sidebar-bg);
+      color: var(--primary);
+    }
+  }
+  .ghost:disabled {
+    opacity: 0.4;
   }
   .ghost:focus-visible {
     outline: 2px solid var(--primary);
@@ -419,6 +587,10 @@
     outline-offset: -1px;
     background: var(--surface);
   }
+  /* Chrome and Safari draw their own ✕ in a type=search field, next to ours. */
+  .search input::-webkit-search-cancel-button {
+    appearance: none;
+  }
   .search input:disabled {
     opacity: 0.5;
   }
@@ -473,5 +645,102 @@
     font-size: var(--font-base);
     z-index: 150;
     max-width: 40rem;
+  }
+  .sort-mark {
+    display: inline-block;
+    width: 18px;
+    text-align: center;
+  }
+
+  /* ── Phone ─────────────────────────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    .drawer {
+      display: block;
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 250;
+      transform: translateX(-100%);
+      /* Hidden once off-screen, not merely moved: its shadow would bleed in at
+         the left edge, and its buttons would still take keyboard focus. */
+      visibility: hidden;
+      transition:
+        transform 0.2s ease-out,
+        visibility 0s 0.2s;
+    }
+    .drawer.open {
+      transform: none;
+      visibility: visible;
+      box-shadow: 0 0 1.5em rgb(10 10 10 / 20%);
+      transition: transform 0.2s ease-out;
+    }
+    .drawer-scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 249;
+      background: var(--scrim);
+    }
+    header {
+      gap: 0.25rem;
+      padding: calc(0.5rem + env(safe-area-inset-top)) 0.5rem 0.5rem;
+      min-height: 3.5rem;
+    }
+    header > :global(.breadcrumb-container),
+    header > strong {
+      flex: 1 1 auto;
+      max-width: none;
+    }
+    .actions {
+      gap: 0.125rem;
+      flex-shrink: 0;
+    }
+    .ghost {
+      width: 40px;
+      height: 40px;
+    }
+    .sep {
+      display: none;
+    }
+    /* The field only exists while search is open, and then it is the row. */
+    .search {
+      display: none;
+    }
+    header.searching > :global(.breadcrumb-container),
+    header.searching > strong,
+    header.searching .burger {
+      display: none;
+    }
+    header.searching .actions {
+      flex: 1 1 auto;
+    }
+    header.searching .actions > :global(:not(.search):not(.close-search)) {
+      display: none;
+    }
+    header.searching .search {
+      display: flex;
+      flex: 1 1 auto;
+    }
+    header.searching .search input {
+      width: 100%;
+      font-size: 1rem; /* under 16px, iOS zooms the page on focus */
+      padding: 0.5rem 2rem 0.5rem 0.875rem;
+    }
+    .tool-bar {
+      padding: 0 1rem;
+    }
+    .tool-bar input {
+      width: 18px;
+      height: 18px;
+    }
+    .listing {
+      padding-bottom: var(--bottom-bar);
+    }
+    .status {
+      left: 0.5rem;
+      right: 0.5rem;
+      max-width: none;
+      bottom: calc(0.75rem + var(--bottom-bar) + env(safe-area-inset-bottom));
+    }
   }
 </style>

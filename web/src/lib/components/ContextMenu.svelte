@@ -3,6 +3,8 @@
   import { browse } from '../browse.svelte'
   import { clipboard } from '../clipboard.svelte'
   import * as act from '../actions'
+  import { media } from '../media.svelte'
+  import Sheet from './Sheet.svelte'
 
   interface Props {
     x: number
@@ -35,6 +37,13 @@
   })
   const single = $derived(targets.length === 1)
 
+  // A phone gets the same items as a bottom sheet: there is no cursor to anchor
+  // a popover to, and a 128px menu at a fingertip is under that fingertip.
+  const sheet = $derived(media.mobile)
+  const title = $derived(
+    !entry ? undefined : single ? entry.name : `${targets.length} items`,
+  )
+
   async function run(fn: () => unknown | Promise<unknown>) {
     try {
       await fn()
@@ -61,9 +70,11 @@
   }
 </script>
 
-<svelte:window onclick={onclose} oncontextmenu={onclose} />
+<!-- The sheet closes on its own scrim; a window-level click would also catch
+     the tap that lands inside it. -->
+<svelte:window onclick={() => !sheet && onclose()} oncontextmenu={() => !sheet && onclose()} />
 
-<div class="context-menu" style="left:{left}px; top:{top}px" role="menu" tabindex="-1">
+{#snippet items()}
   {#if !entry}
     <!-- Blank-area menu. CasaOS gives these items icons; the item menu has none. -->
     <button onclick={() => (onprompt('newFile'), onclose())}>New File</button>
@@ -76,6 +87,12 @@
     <hr />
     <button onclick={() => run(() => browse.load())}>Refresh</button>
   {:else}
+    {#if media.touch && !browse.isSelected(entry.path)}
+      <!-- The long-press is invisible until someone tells you about it; this is
+           the visible way into selection mode. -->
+      <button onclick={() => (browse.toggle(entry.path), onclose())}>Select</button>
+      <hr />
+    {/if}
     <button onclick={doDownload}>Download</button>
     {#if single}
       <button onclick={() => run(() => act.copyPath(entry.path))}>Copy Path</button>
@@ -101,7 +118,15 @@
       </button>
     {/if}
   {/if}
-</div>
+{/snippet}
+
+{#if sheet}
+  <Sheet {title} {onclose}>{@render items()}</Sheet>
+{:else}
+  <div class="context-menu" style="left:{left}px; top:{top}px" role="menu" tabindex="-1">
+    {@render items()}
+  </div>
+{/if}
 
 <style>
   .context-menu {
@@ -115,7 +140,7 @@
       0 0.5em 1em -0.125em rgb(10 10 10 / 10%),
       0 0 0 1px rgb(10 10 10 / 2%);
   }
-  button {
+  .context-menu button {
     display: block;
     width: 100%;
     border: 0;
@@ -128,16 +153,18 @@
     color: inherit;
     transition: all 0.25s;
   }
-  button:hover {
-    background: var(--surface-2);
+  @media (hover: hover) {
+    .context-menu button:hover {
+      background: var(--surface-2);
+    }
+    .context-menu button.danger:hover {
+      background: hsl(348, 100%, 95%);
+    }
   }
-  button.danger {
+  .context-menu button.danger {
     color: var(--red);
   }
-  button.danger:hover {
-    background: hsl(348, 100%, 95%);
-  }
-  hr {
+  .context-menu hr {
     border: 0;
     border-top: 1px solid var(--border);
     margin: 4px;

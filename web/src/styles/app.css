@@ -28,6 +28,14 @@ button {
   cursor: pointer;
 }
 
+/* A finger has no hover, and the grey flash WebKit paints on every tap fights
+   the selected-tile colour. */
+@media (pointer: coarse) {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
 /* Named to match CasaOS-UI, which uses .one-line for the same purpose, so ported
    markup keeps working. */
 .one-line {

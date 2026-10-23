@@ -4,13 +4,16 @@
   import { size as fmtSize, date } from '../format'
   import { iconFor } from '../icons'
   import type { Entry, TextDoc } from '../types'
+  import Icon from './Icon.svelte'
 
   interface Props {
     entry: Entry
     onclose: () => void
     onstatus: (msg: string) => void
+    /** Step to the previous (-1) or next (+1) file of the listing. */
+    onnav?: (delta: number) => void
   }
-  let { entry, onclose, onstatus }: Props = $props()
+  let { entry, onclose, onstatus, onnav }: Props = $props()
 
   // Which viewer to use, from the extension. The lists mirror CasaOS's
   // filePanelMap so a file opens the same way it would there.
@@ -62,6 +65,79 @@
 
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose()
+    // Not in the editor: there the arrows move the caret.
+    else if (kind !== 'text' && e.key === 'ArrowRight') onnav?.(1)
+    else if (kind !== 'text' && e.key === 'ArrowLeft') onnav?.(-1)
+  }
+
+  // ── Touch gestures on the stage ────────────────────────────────────────────
+  // One finger: a horizontal swipe steps through the folder; a double tap
+  // toggles zoom on an image; once zoomed, the finger pans instead. Two fingers
+  // pinch. Built on pointer events, so it also works with a pen; a mouse is left
+  // alone — it has the arrow keys and the browser's own controls.
+  const MAX_ZOOM = 5
+  let scale = $state(1)
+  let tx = $state(0)
+  let ty = $state(0)
+  const pointers = new Map<number, { x: number; y: number }>()
+  let pinch: { dist: number; scale: number } | null = null
+  let drag: { x: number; y: number; t: number; tx: number; ty: number } | null = null
+  let lastTap = 0
+
+  function resetZoom() {
+    scale = 1
+    tx = 0
+    ty = 0
+  }
+
+  function spread() {
+    const [a, b] = [...pointers.values()]
+    return Math.hypot(a.x - b.x, a.y - b.y)
+  }
+
+  function down(e: PointerEvent) {
+    if (e.pointerType === 'mouse') return
+    // Media controls own their drags: scrubbing a video must not change file.
+    if ((e.target as HTMLElement).closest('video, audio')) return
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointers.size === 2) {
+      pinch = { dist: spread(), scale }
+      drag = null
+    } else if (pointers.size === 1) {
+      drag = { x: e.clientX, y: e.clientY, t: Date.now(), tx, ty }
+    }
+  }
+
+  function move(e: PointerEvent) {
+    if (!pointers.has(e.pointerId)) return
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pinch && pointers.size === 2 && kind === 'image') {
+      scale = Math.min(MAX_ZOOM, Math.max(1, (pinch.scale * spread()) / pinch.dist))
+    } else if (drag && scale > 1) {
+      tx = drag.tx + (e.clientX - drag.x)
+      ty = drag.ty + (e.clientY - drag.y)
+    }
+  }
+
+  function up(e: PointerEvent) {
+    if (!pointers.delete(e.pointerId)) return
+    if (pointers.size < 2) pinch = null
+    if (scale <= 1.02 && scale !== 1) resetZoom()
+    if (!drag || pointers.size > 0) return
+    const dx = e.clientX - drag.x
+    const dy = e.clientY - drag.y
+    const quick = Date.now() - drag.t < 250
+    drag = null
+    if (scale === 1 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      onnav?.(dx < 0 ? 1 : -1)
+    } else if (quick && Math.hypot(dx, dy) < 10 && kind === 'image') {
+      const now = Date.now()
+      if (now - lastTap < 300) {
+        if (scale > 1) resetZoom()
+        else scale = 2.5
+        lastTap = 0
+      } else lastTap = now
+    }
   }
 </script>
 
@@ -82,14 +158,31 @@
     <div class="bar">
       <span class="name one-line">{entry.name}</span>
       <div class="right">
-        <a class="ghost" href={rawUrl(entry.path)} download={entry.name}>Download</a>
-        <button class="ghost" onclick={onclose}>Close</button>
+        <a class="ghost" href={rawUrl(entry.path)} download={entry.name} aria-label="Download">
+          <span class="label">Download</span><span class="glyph"><Icon name="download" /></span>
+        </a>
+        <button class="ghost" onclick={onclose} aria-label="Close">
+          <span class="label">Close</span><span class="glyph"><Icon name="close" /></span>
+        </button>
       </div>
     </div>
 
-    <div class="body">
+    <div
+      class="body"
+      class:stage={kind === 'image'}
+      role="presentation"
+      onpointerdown={down}
+      onpointermove={move}
+      onpointerup={up}
+      onpointercancel={up}
+    >
       {#if kind === 'image'}
-        <img {src} alt={entry.name} />
+        <img
+          {src}
+          alt={entry.name}
+          draggable="false"
+          style:transform={scale === 1 ? undefined : `translate(${tx}px, ${ty}px) scale(${scale})`}
+        />
       {:else if kind === 'video'}
         <!-- svelte-ignore a11y_media_has_caption -->
         <video {src} controls autoplay></video>
@@ -180,6 +273,16 @@
     justify-content: center;
     background: var(--surface-sunken);
     overflow: auto;
+    /* Vertical scroll stays the browser's; horizontal moves come to us. */
+    touch-action: pan-y;
+  }
+  /* An image stage takes every gesture: pinch and pan are ours, not the page's. */
+  .body.stage {
+    touch-action: none;
+    overflow: hidden;
+  }
+  .glyph {
+    display: none;
   }
   img {
     max-width: 100%;
@@ -218,5 +321,40 @@
   }
   .meta {
     font-size: var(--font-meta);
+  }
+  @media (max-width: 768px) {
+    .viewer,
+    .viewer.full {
+      inset: 0;
+      border-radius: 0;
+    }
+    /* The editor follows the visual viewport (lib/media), so with the keyboard
+       up the save bar is still on screen instead of scrolled above it. */
+    .viewer.full {
+      top: var(--vvt, 0px);
+      bottom: auto;
+      height: var(--vvh, 100dvh);
+    }
+    .bar {
+      padding: calc(0.25rem + env(safe-area-inset-top)) 0.5rem 0.25rem 1rem;
+    }
+    .bar .ghost {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      background: transparent;
+    }
+    .label {
+      display: none;
+    }
+    .glyph {
+      display: block;
+    }
+    .body {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
   }
 </style>

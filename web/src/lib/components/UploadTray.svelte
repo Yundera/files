@@ -98,8 +98,10 @@
     justify-content: space-between;
     transition: background 0.3s;
   }
-  .card-header:hover {
-    background: var(--sidebar-bg);
+  @media (hover: hover) {
+    .card-header:hover {
+      background: var(--sidebar-bg);
+    }
   }
   .collapse-trigger,
   .dismiss {
@@ -196,7 +198,30 @@
     color: var(--grey-600);
     font-size: 12px;
   }
-  .action button:hover {
-    background: var(--grey-400);
+  @media (hover: hover) {
+    .action button:hover {
+      background: var(--grey-400);
+    }
+  }
+  /* Phone: edge to edge minus a gutter, parked above the selection bar when
+     there is one (--bottom-bar, set by App), half the screen at most. */
+  @media (max-width: 768px) {
+    .upload-list {
+      position: fixed;
+      width: auto;
+      left: 0.5rem;
+      right: 0.5rem;
+      bottom: calc(0.5rem + var(--bottom-bar, 0px) + env(safe-area-inset-bottom));
+    }
+    .card-content {
+      max-height: 50dvh;
+    }
+    .task-file-name {
+      max-width: 100%;
+    }
+    .action button {
+      width: 36px;
+      height: 36px;
+    }
   }
 </style>

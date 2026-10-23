@@ -11,6 +11,9 @@
   import { iconFor } from '../icons'
   import { date, size } from '../format'
   import type { SortKey } from '../types'
+  import { isTouch, media } from '../media.svelte'
+  import { longpress } from '../longpress'
+  import Icon from './Icon.svelte'
 
   const columns: Array<{ label: string; key: SortKey; cls: string }> = [
     { label: 'File name', key: 'name', cls: 'name' },
@@ -32,6 +35,7 @@
           </button>
         </div>
       {/each}
+      {#if media.touch}<div class="td more"></div>{/if}
     </div>
   </div>
   <div class="tbody">
@@ -43,9 +47,10 @@
         oncontextmenu={(e) => onmenu(e, entry)}
         role="row"
         tabindex="0"
-        ondblclick={() => onopen(entry)}
-        onclick={(e) => (e.ctrlKey || e.metaKey ? browse.toggle(entry.path) : browse.selectOnly(entry.path))}
+        ondblclick={(e) => !isTouch(e) && onopen(entry)}
+        onclick={(e) => browse.tap(e, entry.path, () => onopen(entry))}
         onkeydown={(e) => e.key === 'Enter' && onopen(entry)}
+        use:longpress={() => browse.toggle(entry.path)}
       >
         <div class="td check">
           <input
@@ -59,11 +64,30 @@
         </div>
         <div class="td name">
           <img class="cover" src={iconFor(entry)} alt="" />
-          <span class="one-line">{entry.name}</span>
+          <div class="label">
+            <span class="one-line">{entry.name}</span>
+            <!-- The phone form of the Type/Date/Size columns, which do not fit. -->
+            <span class="meta one-line">
+              {entry.kind === 'dir' ? date(entry.modTime) : `${size(entry.size)} · ${date(entry.modTime)}`}
+            </span>
+          </div>
         </div>
         <div class="td type one-line">{entry.kind === 'dir' ? '' : (entry.ext ?? '')}</div>
         <div class="td date one-line">{date(entry.modTime)}</div>
         <div class="td size one-line">{entry.kind === 'dir' ? '' : size(entry.size)}</div>
+        {#if media.touch}
+          <div class="td more">
+            <button
+              aria-label="Actions for {entry.name}"
+              onclick={(e) => {
+                e.stopPropagation()
+                onmenu(e, entry)
+              }}
+            >
+              <Icon name="moreVertical" />
+            </button>
+          </div>
+        {/if}
       </div>
     {/each}
   </div>
@@ -113,8 +137,10 @@
     transition: all 0.25s;
     cursor: pointer;
   }
-  .tbody .tr:hover {
-    background: var(--sidebar-bg);
+  @media (hover: hover) {
+    .tbody .tr:hover {
+      background: var(--sidebar-bg);
+    }
   }
   .tbody .tr.active {
     background: var(--primary-light);
@@ -154,5 +180,50 @@
     height: 2rem;
     margin-right: 1rem;
     flex-shrink: 0;
+  }
+  .label {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .meta {
+    display: none;
+    font-size: var(--font-meta);
+    color: var(--meta-text);
+  }
+  .more {
+    width: 2.75rem;
+    flex-shrink: 0;
+    justify-content: flex-end;
+  }
+  .more button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+  }
+  /* Phone: name over "size · date", the three columns and the header gone.
+     Sorting moves to the header's ⋯ sheet, since the header row held it. */
+  @media (max-width: 768px) {
+    /* .td.x, not .x: `.tbody .td { display: flex }` would outrank a lone class. */
+    .thead,
+    .td.type,
+    .td.date,
+    .td.size {
+      display: none;
+    }
+    .tr-wrapper {
+      padding: 0 0.25rem 0 1rem;
+    }
+    .meta {
+      display: block;
+    }
+    .cover {
+      margin-right: 0.75rem;
+    }
   }
 </style>

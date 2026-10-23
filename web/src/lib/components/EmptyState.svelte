@@ -1,17 +1,22 @@
 <script lang="ts">
   import { illustration } from '../icons'
+  import { media } from '../media.svelte'
 
   interface Props {
     onaction: (kind: 'newFile' | 'newFolder' | 'uploadFiles' | 'uploadFolder') => void
   }
   let { onaction }: Props = $props()
 
-  const tiles = [
+  const all = [
     { label: 'New File', art: 'newFile' as const, kind: 'newFile' as const },
     { label: 'New Folder', art: 'newFolder' as const, kind: 'newFolder' as const },
     { label: 'Upload Files', art: 'upfile' as const, kind: 'uploadFiles' as const },
     { label: 'Upload Folder', art: 'upfolder' as const, kind: 'uploadFolder' as const },
   ]
+  // Folder upload rides on `webkitdirectory`, which iOS ignores and Android
+  // handles unevenly; on a touch device the tile would open a picker that
+  // cannot pick a folder.
+  const tiles = $derived(media.touch ? all.filter((t) => t.kind !== 'uploadFolder') : all)
 </script>
 
 <!-- CasaOS's empty holder: the label sits ABOVE the art, not below it. -->
@@ -65,8 +70,28 @@
     font-size: 14px;
     transition: all 0.3s ease;
   }
-  li:hover {
-    background: rgb(235, 235, 235);
+  @media (hover: hover) {
+    li:hover {
+      background: rgb(235, 235, 235);
+    }
+  }
+  @media (max-width: 768px) {
+    .empty {
+      padding: 1rem;
+    }
+    h5 {
+      font-size: 1rem;
+    }
+    li {
+      width: 96px;
+      height: 104px;
+      margin: 0.375rem;
+      font-size: var(--font-meta);
+    }
+    li img {
+      width: 40px;
+      height: 40px;
+    }
   }
   /* A flex column, not a fixed padding-top plus an absolutely positioned image.
      The old version pinned the art at top:60px and let the label find its own

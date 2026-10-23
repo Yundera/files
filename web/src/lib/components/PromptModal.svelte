@@ -41,7 +41,17 @@
     }}
   >
     <!-- svelte-ignore a11y_autofocus -->
-    <input bind:this={input} bind:value={current} onkeydown={(e) => e.key === 'Escape' && oncancel()} />
+    <!-- A file name, not prose: no capitalised first letter, no autocorrected
+         ".jsno" → "Jason", and the phone keyboard's return key reads "Done". -->
+    <input
+      bind:this={input}
+      bind:value={current}
+      onkeydown={(e) => e.key === 'Escape' && oncancel()}
+      enterkeyhint="done"
+      autocapitalize="off"
+      autocomplete="off"
+      spellcheck="false"
+    />
     <div class="buttons">
       <button type="button" class="ghost" onclick={oncancel}>Cancel</button>
       <button type="submit" class="primary" disabled={!current.trim()}>{confirmLabel}</button>
@@ -108,5 +118,19 @@
   }
   .primary:disabled {
     opacity: 0.5;
+  }
+  /* Phone: high enough that the on-screen keyboard does not cover it. */
+  @media (max-width: 768px) {
+    .modal {
+      top: 12%;
+    }
+    input {
+      font-size: 1rem; /* under 16px, iOS zooms the page on focus */
+    }
+    .ghost,
+    .primary {
+      min-height: 44px;
+      padding: 0 1.25rem;
+    }
   }
 </style>

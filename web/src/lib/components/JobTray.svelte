@@ -146,7 +146,32 @@
     font-size: var(--font-meta);
     flex-shrink: 0;
   }
-  .cancel:hover {
-    color: var(--red);
+  @media (hover: hover) {
+    .cancel:hover {
+      color: var(--red);
+    }
+  }
+  /* Phone: a 20rem popper anchored to a button near the right edge runs off the
+     left side; pin it under the header across the screen instead. */
+  @media (max-width: 768px) {
+    .popper {
+      position: fixed;
+      left: 0.5rem;
+      right: 0.5rem;
+      top: 3.5rem;
+      width: auto;
+      max-height: 60dvh;
+      overflow-y: auto;
+    }
+    /* Narrower than on desktop: the header row is shared with the breadcrumb. */
+    .trigger {
+      min-height: 32px;
+      padding: 0 0.5rem;
+      font-size: var(--font-meta);
+    }
+    .cancel {
+      min-height: 36px;
+      padding: 0 0.5rem;
+    }
   }
 </style>

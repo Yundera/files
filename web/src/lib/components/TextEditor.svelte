@@ -3,6 +3,8 @@
   import { api, ApiError } from '../api'
   import type { EditorHandle } from '../editor'
   import type { Entry, TextDoc } from '../types'
+  import { media } from '../media.svelte'
+  import Icon from './Icon.svelte'
 
   // CodeMirror and its language modes are ~800 kB, and marked + DOMPurify add
   // more. Importing them statically would put all of it in the initial bundle,
@@ -129,7 +131,9 @@
       <button class="primary" onclick={save} disabled={!dirty || saving}>
         {saving ? 'Saving…' : 'Save'}
       </button>
-      <button class="ghost" onclick={tryClose}>Close</button>
+      <button class="ghost close" onclick={tryClose} aria-label="Close">
+        {#if media.mobile}<Icon name="close" />{:else}Close{/if}
+      </button>
     </div>
   </div>
 
@@ -143,7 +147,9 @@
   {#if loadError}
     <p class="error">{loadError}</p>
   {:else}
-    <div class="panes" class:split={preview}>
+    <!-- A phone has no room for side by side: the preview REPLACES the source
+         while on, and the editor stays mounted underneath so nothing reloads. -->
+    <div class="panes" class:split={preview} class:swap={preview && media.mobile}>
       <div class="pane" bind:this={host}></div>
       {#if preview}
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -246,5 +252,36 @@
   .error {
     color: var(--red);
     padding: 1.5rem;
+  }
+  .panes.swap .pane:first-child {
+    display: none;
+  }
+  .panes.swap .pane + .pane {
+    border-left: 0;
+  }
+  @media (max-width: 768px) {
+    .bar {
+      gap: 0.5rem;
+      padding: calc(0.25rem + env(safe-area-inset-top)) 0.5rem 0.25rem 1rem;
+    }
+    .ghost,
+    .primary {
+      min-height: 36px;
+    }
+    .close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      padding: 0;
+      background: transparent;
+    }
+    .markdown {
+      padding: 1rem;
+    }
+    /* Under 16px, iOS zooms the page when the editor takes focus. */
+    .pane :global(.cm-editor) {
+      font-size: 1rem;
+    }
   }
 </style>
