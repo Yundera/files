@@ -140,7 +140,7 @@ func (h *Hub) remove(c *client) {
 // ServeWS upgrades and runs the two pumps for one client.
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	// OriginPatterns "*" because the app is reached on several hostnames (the
-	// gateway domain plus two nip.io/sslip.io spellings) and sits behind a gate
+	// gateway domain plus its ip.<zone>/sslip.io spellings) and sits behind a gate
 	// that has already authenticated the request. The socket exposes no mutation
 	// — it is subscribe-only — so origin is not the control that matters here.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
