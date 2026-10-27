@@ -89,9 +89,13 @@ func New(f *vfs.FS, cfg config.Config) (*Manager, error) {
 		// No CORS headers. The app is same-origin behind a gate, and tusd's
 		// defaults would otherwise contradict the rest of the API, which sets
 		// none at all.
-		Cors:                    &tus.CorsConfig{Disable: true},
-		DisableDownload:         true, // reads go through /api/fs/raw, which enforces the disposition rules
-		DisableConcatenation:    true, // no client needs it, and it widens the surface
+		Cors:                 &tus.CorsConfig{Disable: true},
+		DisableDownload:      true, // reads go through /api/fs/raw, which enforces the disposition rules
+		DisableConcatenation: true, // no client needs it, and it widens the surface
+		// The app speaks plain HTTP behind AppShield, which sets X-Forwarded-Proto/Host
+		// from Caddy. Without this the creation Location is http://, and the browser
+		// blocks every PATCH that follows as mixed content: no upload ever completes.
+		RespectForwardedHeaders: true,
 		PreUploadCreateCallback: m.validateCreate,
 	})
 	if err != nil {
