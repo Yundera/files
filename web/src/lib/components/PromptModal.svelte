@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
+
   interface Props {
     title: string
     value?: string
@@ -15,11 +17,14 @@
   let current = $state(value)
   let input: HTMLInputElement | undefined = $state()
 
+  // Runs once, when the input mounts. `current` is read untracked: it is bound to
+  // the input, so tracking it re-ran this on every keystroke, re-selected the text,
+  // and the next key replaced it — typing a name left only its last character.
   $effect(() => {
     input?.focus()
     // Select the stem, not the extension — renaming "report.pdf" should not make
     // it trivially easy to delete the ".pdf".
-    const dot = current.lastIndexOf('.')
+    const dot = untrack(() => current).lastIndexOf('.')
     if (dot > 0) input?.setSelectionRange(0, dot)
     else input?.select()
   })
