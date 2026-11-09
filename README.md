@@ -173,6 +173,4 @@ network, so the gate cannot be bypassed by another app on the box.
 Unlike the FileBrowser app, the gate needs no `ALLOWED_PATHS` beyond
 `api/health` — there is no anonymous surface to exempt.
 
-See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the internals and
-[`IMPLEMENTATION-NOTES.md`](./IMPLEMENTATION-NOTES.md) for the build order and
-the decisions behind them.
+See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the internals.

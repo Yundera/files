@@ -34,7 +34,6 @@ type Config struct {
 	// The default lives INSIDE DataRoot, which is load-bearing: it makes
 	// delete-to-trash a single os.Root.Rename within one root. A path outside
 	// DataRoot would need a cross-root rename, which os.Root does not offer.
-	// See IMPLEMENTATION-NOTES.md.
 	StateDirPath string
 
 	// PUID/PGID own every file and directory this app creates.
@@ -52,7 +51,7 @@ type Config struct {
 	FileMode os.FileMode
 
 	// TZ affects display only. The API speaks RFC 3339 UTC and the browser
-	// formats; see IMPLEMENTATION-NOTES.md "Timezone".
+	// formats.
 	TZ string
 
 	// TrashRetention purges trashed items older than this. Zero disables it.
